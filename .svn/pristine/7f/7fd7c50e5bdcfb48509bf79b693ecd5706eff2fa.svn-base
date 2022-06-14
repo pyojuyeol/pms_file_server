@@ -1,0 +1,9 @@
+jdbc.properties=c:/pms/db/jdbc/properties
+db.dump=c:/pms/db/backup/dump
+file.upload=c:/pms/file/upload
+cloud.upload=c:/pms/cloud/file
+pds.upload=c:/pms/pds/file/upload
+member.picture.upload=c:/pms/member/picture/upload/
+error.log=c:/pms/error_log/
+summernote.img=c:/pms/attach/board/img
+login.user.log=c:/pms/log/loginUser

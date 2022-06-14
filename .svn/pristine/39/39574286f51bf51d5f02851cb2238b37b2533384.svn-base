@@ -1,0 +1,199 @@
+package kr.or.server.service;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import kr.or.server.command.CloudDownloadCommand;
+import kr.or.server.command.CloudModifyCommand;
+import kr.or.server.dto.AttachVO;
+import kr.or.server.dto.CloudVO;
+import kr.or.server.util.MakeFileName;
+import net.lingala.zip4j.core.ZipFile;
+import net.lingala.zip4j.model.ZipParameters;
+import org.apache.commons.io.IOUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+public class FileServiceImpl implements FileService {
+	private String fileUploadPath;
+
+	public void setFileUploadPath(String fileUploadPath) {
+		this.fileUploadPath = fileUploadPath;
+	}
+
+	public List<AttachVO> attachesUploadFile(String register, List<MultipartFile> files) throws Exception {
+		List<AttachVO> attachList = new ArrayList();
+
+		for (MultipartFile multi : files) {
+			String originalFileName = multi.getOriginalFilename();
+			String storedFileName = MakeFileName.toUUIDFileName(originalFileName, "$$");
+			String fileSize = Long.toString(multi.getSize());
+			String extension = multi.getOriginalFilename().substring(multi.getOriginalFilename().lastIndexOf(".") + 1);
+			File file = new File(this.fileUploadPath, storedFileName);
+
+			file.mkdirs();
+
+			multi.transferTo(file);
+
+			AttachVO attach = new AttachVO();
+			attach.setRegister(register);
+			attach.setAttachPath(this.fileUploadPath);
+			attach.setNm(originalFileName);
+			attach.setStroredNm(storedFileName);
+			attach.setExt(extension);
+			attach.setFileSize(fileSize);
+			attach.setRegDt(new Date());
+
+			attachList.add(attach);
+		}
+		return attachList;
+	}
+
+	public CloudVO cloudUploadFile(String register, MultipartFile file, String filePath) throws Exception {
+		String originalFileName = file.getOriginalFilename();
+		String storedFileName = MakeFileName.toUUIDFileName(originalFileName, "$$");
+		String fileSize = Long.toString(file.getSize());
+		String extension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf(".") + 1);
+		String dirPath = this.fileUploadPath + "/" + filePath;
+		File uploadFile = new File(dirPath, storedFileName);
+
+		uploadFile.mkdirs();
+		if (file != null) {
+			file.transferTo(uploadFile);
+		}
+
+		CloudVO cloud = new CloudVO();
+		cloud.setRegister(register);
+		cloud.setPath(dirPath + "/" + storedFileName);
+		cloud.setFileNm(originalFileName);
+		cloud.setStoredNm(storedFileName);
+		cloud.setExt(extension);
+		cloud.setFilesize(fileSize);
+		cloud.setRegDt(new Date());
+
+		return cloud;
+	}
+
+	public byte[] getFile(String savedPath, String fileName) throws Exception {
+		File downloadFile = new File(savedPath, fileName);
+		byte[] bytes = Files.readAllBytes(downloadFile.toPath());
+
+		return bytes;
+	}
+
+	public String removeFile(String path) throws Exception {
+		File savedFile = null;
+		if (path.lastIndexOf("c:") > 0) {
+			savedFile = new File(path.substring(fileUploadPath.length()));
+		} else {
+			savedFile = new File(path);
+		}
+		String result = "";
+		if (savedFile.isDirectory()) {
+			File[] folderList = savedFile.listFiles(); // 파일리스트 얻어오기
+
+			for (int i = 0; i < folderList.length; i++) {
+				if (folderList[i].isFile()) {
+					folderList[i].delete(); // 파일 삭제
+				} else { // 폴더면 재귀함수
+					removeFile(folderList[i].getPath());
+				}
+				folderList[i].delete();
+			}
+			savedFile.delete(); // 대상폴더 삭제
+			result = "success";
+		} else {
+			savedFile.delete();	// 파일로 들어오면 그냥 삭제
+			result = "success";
+		}
+
+		return result;
+	}
+
+	public byte[] getZipFile(CloudDownloadCommand[] downloadInfoList) throws Exception {
+		String zipFilePath = this.fileUploadPath + File.separator + "CloudFile.zip";
+		ZipFile zipFile = new ZipFile(zipFilePath);
+
+		ZipParameters parameters = new ZipParameters();
+		parameters.setCompressionMethod(8);
+		parameters.setCompressionLevel(5);
+
+		String filePath = "";
+		if (downloadInfoList != null) {
+			CloudDownloadCommand[] arrayOfCloudDownloadCommand;
+			int j = (arrayOfCloudDownloadCommand = downloadInfoList).length;
+			for (int i = 0; i < j; i++) {
+				CloudDownloadCommand cdc = arrayOfCloudDownloadCommand[i];
+				if (cdc.getType().equals("folder")) {
+					filePath = this.fileUploadPath + cdc.getPath();
+					zipFile.addFolder(filePath, parameters);
+				} else {
+					filePath = cdc.getPath();
+					zipFile.addFile(new File(filePath), parameters);
+				}
+			}
+		}
+		InputStream is = null;
+		try {
+			is = new FileInputStream(zipFile.getFile());
+			File tempFile;
+			return IOUtils.toByteArray(is);
+		} finally {
+			is.close();
+			File tempFile = new File(zipFilePath);
+			if (tempFile.exists()) {
+				tempFile.delete();
+			}
+		}
+	}
+
+	public CloudModifyCommand modifyCloudName(CloudModifyCommand modifyInfo) throws Exception {
+		if (modifyInfo.getType().equals("file")) {
+			String oldPath = modifyInfo.getPath();
+			String newFileName = modifyInfo.getNewFileName() + "." + modifyInfo.getExtension();
+			newFileName = MakeFileName.toUUIDFileName(newFileName, "$$");
+
+			String newPath = oldPath.substring(0, oldPath.lastIndexOf("/") + 1) + newFileName;
+
+			File file = new File(oldPath);
+			File newFile = new File(newPath);
+
+			boolean result = file.renameTo(newFile);
+			if (result) {
+				modifyInfo.setNewFileName(MakeFileName.parseFileNameFromUUID(newFileName, "\\$\\$"));
+				modifyInfo.setPath(newPath);
+			}
+			return modifyInfo;
+		}
+		String oldPath = modifyInfo.getPath();
+		String newFileName = modifyInfo.getNewFileName();
+
+		String newPath = this.fileUploadPath + oldPath.substring(0, oldPath.lastIndexOf("/") + 1) + newFileName;
+
+		File file = new File(this.fileUploadPath + oldPath);
+		File newFile = new File(newPath);
+
+		boolean result = file.renameTo(newFile);
+		if (result) {
+			modifyInfo.setPath(newPath);
+		}
+		return modifyInfo;
+	}
+
+	@Override
+	public String registCloudDirectory(String path) throws Exception {
+		File newDirectory = new File(fileUploadPath + path);
+		String result = "";
+		if (newDirectory != null) {
+			newDirectory.mkdirs();
+			result = "success";
+			System.out.println("fileService" + result);
+		}
+
+		return result;
+	}
+}

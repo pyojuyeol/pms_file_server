@@ -1,0 +1,103 @@
+package kr.or.server.service;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+import org.springframework.web.multipart.MultipartFile;
+
+import kr.or.server.dto.AttachVO;
+import kr.or.server.dto.CloudVO;
+import kr.or.server.util.MakeFileName;
+
+public class FileServiceImpl implements FileService {
+	
+	private String fileUploadPath;
+	public void setFileUploadPath(String fileUploadPath) {
+		this.fileUploadPath = fileUploadPath;
+	}
+
+	@Override
+	public List<AttachVO> attachesUploadFile(String register, List<MultipartFile> files) throws Exception {
+		
+		List<AttachVO> attachList = new ArrayList<AttachVO>();
+		System.out.println(fileUploadPath);
+		for (MultipartFile multi : files) {
+			String originalFileName = multi.getOriginalFilename();
+			String storedFileName = MakeFileName.toUUIDFileName(originalFileName, "$$");
+			String fileSize = Long.toString(multi.getSize());
+			String extension = multi.getOriginalFilename().substring(multi.getOriginalFilename().lastIndexOf(".") + 1);
+			File file = new File(fileUploadPath, storedFileName);
+			
+			file.mkdirs();
+			
+			multi.transferTo(file);
+			
+			AttachVO attach = new AttachVO();
+			attach.setRegister(register);
+			attach.setAttachPath(fileUploadPath);
+			attach.setNm(originalFileName);
+			attach.setStroredNm(storedFileName);
+			attach.setExt(extension);
+			attach.setFileSize(fileSize);
+			attach.setRegDt(new Date());
+			
+			attachList.add(attach);
+		}
+		return attachList;
+	}
+	
+	@Override
+	public List<CloudVO> cloudsUploadFile(String register, List<MultipartFile> files) throws Exception {
+		
+		List<CloudVO> cloudList = new ArrayList<CloudVO>();
+		System.out.println(fileUploadPath);
+		for (MultipartFile multi : files) {
+			String originalFileName = multi.getOriginalFilename();
+			String storedFileName = MakeFileName.toUUIDFileName(originalFileName, "$$");
+			String fileSize = Long.toString(multi.getSize());
+			String extension = multi.getOriginalFilename().substring(multi.getOriginalFilename().lastIndexOf(".") + 1);
+			File file = new File(fileUploadPath, storedFileName);
+			
+			file.mkdirs();
+			
+			multi.transferTo(file);
+			
+			CloudVO cloud = new CloudVO();
+			cloud.setRegister(register);
+			cloud.setPath(fileUploadPath);
+			cloud.setFileNm(originalFileName);
+			cloud.setStoredNm(storedFileName);
+			cloud.setExt(extension);
+			cloud.setFilesize(fileSize);
+			cloud.setRegDt(new Date());
+			
+			cloudList.add(cloud);
+		}
+		return cloudList;
+	}
+
+	@Override
+	public byte[] getFile(String savedPath, String fileName) throws Exception {
+		File downloadFile = new File(savedPath, fileName);
+		byte[] bytes = Files.readAllBytes(downloadFile.toPath());
+		
+		return bytes;
+	}
+
+	@Override
+	public String removeFile(String savedPath, String fileName) throws Exception {
+		File savedFile = new File(savedPath, fileName);
+		String result = "";
+		if (savedFile.exists()) {
+			savedFile.delete();
+			result = "success";
+		} else {
+			result = "nofile";
+		}
+		return result;
+	}
+
+}
